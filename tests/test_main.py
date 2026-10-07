@@ -65,6 +65,7 @@ class TestMain:
         monkeypatch.setattr(consumer, "executar_consumer", etapas.executar_consumer)
         monkeypatch.setattr(main, "configurar_logs", etapas.configurar_logs)
         monkeypatch.setattr(main, "gerar_relatorio", etapas.gerar_relatorio)
+        monkeypatch.setattr(main, "notificar_divergencia", etapas.notificar_divergencia)
         return etapas
 
     @pytest.mark.parametrize("etapa, precisa_desktop", [("todas", True), ("consumer", True), ("producer", False)])
@@ -91,11 +92,29 @@ class TestMain:
             call.gerar_relatorio(ctx),
         ]
 
+    def test_divergencia_na_conferencia_envia_email(self, monkeypatch, etapas):
+        etapas.gerar_relatorio.return_value = False
+        _rodar(monkeypatch)
+        ctx = etapas.gerar_relatorio.call_args.args[0]
+        assert etapas.mock_calls[-2:] == [call.gerar_relatorio(ctx), call.notificar_divergencia(ctx)]
+
+    def test_dados_batendo_100_porcento_nao_envia_email(self, monkeypatch, etapas):
+        _rodar(monkeypatch)
+        etapas.notificar_divergencia.assert_not_called()
+
+    def test_divergencia_apos_erro_inesperado_tambem_envia_email(self, monkeypatch, etapas):
+        etapas.gerar_relatorio.return_value = False
+        etapas.executar_consumer.side_effect = RuntimeError("Fakturama travou")
+        monkeypatch.setattr(Evidencias, "erro", MagicMock())
+        assert _rodar(monkeypatch) == 1
+        etapas.notificar_divergencia.assert_called_once()
+
     def test_etapa_producer_coleta_sem_cadastrar_nem_conferir(self, monkeypatch, etapas):
         assert _rodar(monkeypatch, "--etapa", "producer") == 0
         etapas.executar_producer.assert_called_once()
         etapas.executar_consumer.assert_not_called()
         etapas.gerar_relatorio.assert_not_called()
+        etapas.notificar_divergencia.assert_not_called()
 
     def test_etapa_consumer_retoma_a_ultima_execucao(self, monkeypatch, etapas, pasta_resultados):
         (pasta_resultados / "2026-10-07_08-40-01").mkdir()

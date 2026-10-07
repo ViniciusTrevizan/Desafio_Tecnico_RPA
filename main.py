@@ -14,6 +14,7 @@ from src.core.ambiente import validar_ambiente
 from src.core.contexto import Contexto
 from src.core.excecoes import BusinessException, SystemException
 from src.core.logger import banner, configurar_logs, get_logger
+from src.core.notificacao import notificar_divergencia
 from src.core.relatorio import gerar_relatorio
 
 log = get_logger()
@@ -61,8 +62,9 @@ def main() -> int:
         ctx.evidencias.erro("execucao")
         return 1
     finally:
-        if args.etapa != "producer":  # só há o que conferir depois do cadastro desktop
-            gerar_relatorio(ctx)
+        # só há o que conferir depois do cadastro desktop; se não bater 100%, avisa por e-mail
+        if args.etapa != "producer" and not gerar_relatorio(ctx):
+            notificar_divergencia(ctx)
 
     return 0
 

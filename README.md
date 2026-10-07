@@ -33,7 +33,8 @@ desafio/
 │   │   ├── fila.py              # fila de trabalho em JSON
 │   │   ├── contexto.py          # pastas da execução
 │   │   ├── excecoes.py          # BusinessException × SystemException
-│   │   └── relatorio.py         # conferência CSV × cadastrados
+│   │   ├── relatorio.py         # conferência CSV × cadastrados
+│   │   └── notificacao.py       # e-mail quando a conferência diverge
 │   ├── models/entidades.py      # Comprador, Produto (+ validação)
 │   ├── producer/                # navegador, gerador_identidade, saucedemo, producer
 │   ├── consumer/                # desktop (primitivas), fakturama (ações), consumer
@@ -95,6 +96,21 @@ python main.py --etapa consumer --run-id <id> --reprocessar-falhas
 ```
 
 Variáveis de ambiente: `FAKTURAMA_EXE`, `RPA_HEADLESS=true`, `RPA_LOG_LEVEL=DEBUG`, `NO_COLOR=1`.
+### Aviso por e-mail em caso de divergência
+
+Se a conferência final (`resumo.json`) mostrar que web e desktop **não batem 100%**, o robô envia um
+e-mail para `vinicius_trevizan.dev@outlook.com` com os itens pendentes e `resumo.json` + `erros.log` anexados.
+Configure o SMTP por variáveis de ambiente (sem elas, o envio é pulado e um aviso vai para o log):
+
+```bash
+export RPA_SMTP_USUARIO="robo@gmail.com"
+export RPA_SMTP_SENHA="<senha de app>"          # Gmail: myaccount.google.com/apppasswords
+export RPA_SMTP_HOST="smtp.gmail.com"           # padrão; porta RPA_SMTP_PORTA=587 (STARTTLS)
+export RPA_EMAIL_DESTINO="outro@exemplo.com"    # opcional: troca o destinatário
+```
+
+Uma falha no envio (rede, credencial) é registrada em `erros.log` e não interrompe o robô.
+
 Para abortar o robô, mova o mouse para o canto superior esquerdo da tela (failsafe do pyautogui).
 
 ## Testes
@@ -117,4 +133,4 @@ python -m pytest --cov=src --cov=config --cov=main --cov-report=term-missing
 | §4.4 CSVs como ponte web → desktop                      | test_csv_handler, test_producer, test_fila   |
 | §4.5/§4.6 Cadastro por imagem + atalhos de teclado      | test_desktop, test_fakturama, test_consumer  |
 | §4.7/§5 Prints, log e pasta de resultados               | test_evidencias, test_logger, test_contexto  |
-| §6 Web × desktop batem 100%, tratamento de erros        | test_relatorio, test_decorators, test_main   |
+| §6 Web × desktop batem 100%, tratamento de erros        | test_relatorio, test_notificacao, test_decorators, test_main |

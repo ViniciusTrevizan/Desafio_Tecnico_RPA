@@ -5,10 +5,12 @@ e área de transferência (pyperclip). Aqui essas bibliotecas são trocadas por 
 ANTES de o código ser importado — a suíte roda sem internet, sem Fakturama, sem sessão
 gráfica e sem mexer no computador de quem executa. Cada teste configura o dublê de que precisa.
 
-Proteções automáticas (autouse): nenhum teste espera de verdade (time.sleep), grava na pasta
-resultados/ real ou deixa os loggers do robô configurados para o teste seguinte.
+Proteções automáticas (autouse): nenhum teste espera de verdade (time.sleep), envia e-mail
+(smtplib.SMTP), grava na pasta resultados/ real ou deixa os loggers do robô configurados para o
+teste seguinte.
 """
 import logging
+import smtplib
 import sys
 import time
 import types
@@ -73,6 +75,14 @@ def sem_espera(monkeypatch):
     espera = MagicMock(name="time.sleep")
     monkeypatch.setattr(time, "sleep", espera)
     return espera
+
+
+@pytest.fixture(autouse=True)
+def smtp(monkeypatch):
+    """Troca smtplib.SMTP por um mock: nenhum teste conecta a um servidor de e-mail."""
+    servidor = MagicMock(name="smtplib.SMTP")
+    monkeypatch.setattr(smtplib, "SMTP", servidor)
+    return servidor
 
 
 @pytest.fixture(autouse=True)

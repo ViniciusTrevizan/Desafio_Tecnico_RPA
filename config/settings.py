@@ -52,3 +52,12 @@ ESPERA_ENTRE_TENTATIVAS = 2
 CSV_DELIMITADOR = ";"
 CSV_ENCODING = "utf-8-sig"         # BOM para abrir corretamente no Excel
 NIVEL_LOG_CONSOLE = os.getenv("RPA_LOG_LEVEL", "INFO")
+
+# ── Notificação por e-mail (enviada quando web × desktop não batem 100%) ─────
+EMAIL_DESTINATARIO = os.getenv("RPA_EMAIL_DESTINO", "vinicius_trevizan.dev@outlook.com")
+SMTP_HOST = os.getenv("RPA_SMTP_HOST", "smtp.gmail.com")
+SMTP_PORTA = int(os.getenv("RPA_SMTP_PORTA", "587"))   # STARTTLS
+SMTP_USUARIO = os.getenv("RPA_SMTP_USUARIO", "")
+SMTP_SENHA = os.getenv("RPA_SMTP_SENHA", "")           # Gmail/Outlook: use uma "senha de app"
+EMAIL_REMETENTE = os.getenv("RPA_EMAIL_REMETENTE", "") or SMTP_USUARIO
+TIMEOUT_SMTP = 30
