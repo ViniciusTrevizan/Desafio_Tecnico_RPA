@@ -18,12 +18,14 @@ TIMEOUT_WEB_MS = int(os.getenv("RPA_TIMEOUT_WEB_MS", "30000"))
 
 # ── Automação desktop (consumer) ─────────────────────────────────────────────
 FAKTURAMA_EXECUTAVEL = os.getenv("FAKTURAMA_EXE", "/opt/Fakturama2/Fakturama")
+FAKTURAMA_JANELA = "Fakturama"     # classe (Linux) / início do título (Windows) da janela principal
+ESPERA_APOS_MAXIMIZAR = 1.0
 TIMEOUT_ABERTURA_APP = 90          # segundos aguardando a janela principal
 TIMEOUT_IMAGEM = 15                # segundos procurando uma imagem na tela
 CONFIANCA_IMAGEM = 0.85            # similaridade mínima (OpenCV)
 PAUSA_ENTRE_ACOES = 0.3            # pausa padrão do pyautogui entre comandos
 ESPERA_APOS_SALVAR = 1.5
-OFFSET_CAMPO_X = 150               # px à direita do rótulo onde fica o campo de texto
+OFFSET_CAMPO_X = 40                # px à direita da borda do rótulo "campo_*" onde fica a caixa de texto
 SEPARADOR_DECIMAL_FAKTURAMA = ","  # Fakturama em pt-BR usa vírgula
 
 # Imagens de referência (recortes da tela salvos em assets/imagens)

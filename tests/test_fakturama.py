@@ -14,6 +14,7 @@ import pytest
 from config import settings
 from src.consumer import fakturama
 from src.consumer.fakturama import Fakturama
+from src.core import ambiente
 from src.core.evidencias import Evidencias
 from src.core.excecoes import ElementoNaoEncontrado, SystemException
 from src.models.entidades import Produto
@@ -25,6 +26,7 @@ def tela(monkeypatch, sem_espera):
     tela = MagicMock()
     tela.attach_mock(MagicMock(spec=Evidencias), "evidencias")
     tela.attach_mock(sem_espera, "espera")
+    tela.desktop.ponto_de_clique.side_effect = lambda chave: (f"x:{chave}", f"y:{chave}")
     monkeypatch.setattr(fakturama, "desktop", tela.desktop)
     return tela
 
@@ -41,11 +43,12 @@ def popen(monkeypatch):
     return popen
 
 
-def _preencher(rotulo, valor):
-    """Clique ao lado do rótulo (imagem) → digita o valor → TAB."""
-    return [call.desktop.clicar_imagem(rotulo, offset_x=settings.OFFSET_CAMPO_X),
-            call.desktop.digitar(valor),
-            call.desktop.tecla("tab")]
+def _preencher(*campos):
+    """Localiza TODOS os campos antes de tocar no formulário; depois, por campo: UM clique → digita (sem TAB)."""
+    rotulos = [rotulo for rotulo, _ in campos]
+    return [*[call.desktop.ponto_de_clique(rotulo) for rotulo in rotulos],
+            *[chamada for rotulo, valor in campos
+              for chamada in (call.desktop.clicar(f"x:{rotulo}", f"y:{rotulo}"), call.desktop.digitar(valor))]]
 
 
 def _salvar_com_print(nome_print):
@@ -57,36 +60,78 @@ def _salvar_com_print(nome_print):
 
 
 class TestAbrir:
-    def test_reaproveita_o_fakturama_ja_aberto(self, app, tela, popen):
-        tela.desktop.existe.return_value = True
-        app.abrir()
-        popen.assert_not_called()
-        assert tela.mock_calls == [call.desktop.existe("app_pronto")]
+    @pytest.fixture(autouse=True)
+    def windows(self, monkeypatch):
+        """Comportamento padrão (Windows): usa FAKTURAMA_EXE / settings como está."""
+        monkeypatch.setattr(ambiente, "SISTEMA", "Windows")
 
-    def test_inicia_o_executavel_e_aguarda_a_janela_principal(self, app, tela, popen, tmp_path, monkeypatch):
+    @pytest.fixture
+    def executavel(self, tmp_path, monkeypatch):
         executavel = tmp_path / "Fakturama"
         executavel.touch()
         monkeypatch.setattr(settings, "FAKTURAMA_EXECUTAVEL", str(executavel))
-        tela.desktop.existe.return_value = False
+        return executavel
+
+    def test_reaproveita_o_fakturama_ja_aberto_trazendo_para_a_frente_maximizado(self, app, tela, popen):
+        tela.desktop.maximizar_janela.return_value = True
+        app.abrir()
+        popen.assert_not_called()
+        assert tela.mock_calls == [call.desktop.maximizar_janela(settings.FAKTURAMA_JANELA),
+                                   call.desktop.localizar("app_pronto")]
+
+    def test_inicia_o_executavel_aguarda_a_janela_principal_e_maximiza(self, app, tela, popen, executavel):
+        tela.desktop.maximizar_janela.side_effect = [False, True]  # fechado → aberto pelo robô
 
         app.abrir()
 
         popen.assert_called_once_with([str(executavel)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        tela.desktop.localizar.assert_called_once_with("app_pronto", timeout=settings.TIMEOUT_ABERTURA_APP)
+        assert tela.mock_calls == [call.desktop.maximizar_janela(settings.FAKTURAMA_JANELA),
+                                   call.desktop.localizar("app_pronto", timeout=settings.TIMEOUT_ABERTURA_APP),
+                                   call.desktop.maximizar_janela(settings.FAKTURAMA_JANELA)]
+
+    def test_janela_que_nao_maximiza_e_falha_tecnica(self, app, tela, popen, executavel):
+        tela.desktop.maximizar_janela.return_value = False
+        with pytest.raises(SystemException, match="não encontrada para maximizar"):
+            app.abrir()
+
+    def test_no_linux_abre_em_sessao_propria_sem_variaveis_do_snap(self, app, tela, popen, executavel, monkeypatch):
+        monkeypatch.setattr(ambiente, "SISTEMA", "Linux")
+        monkeypatch.setattr(ambiente, "executavel_fakturama", lambda: executavel)
+        monkeypatch.setattr(ambiente, "variaveis_sem_snap", lambda: {"DISPLAY": ":0"})
+        tela.desktop.maximizar_janela.side_effect = [False, True]
+
+        app.abrir()
+
+        popen.assert_called_once_with([str(executavel)], cwd=executavel.parent, start_new_session=True,
+                                      env={"DISPLAY": ":0"}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def test_executavel_ausente_e_falha_tecnica_com_orientacao(self, app, tela, popen, tmp_path, monkeypatch):
         monkeypatch.setattr(settings, "FAKTURAMA_EXECUTAVEL", str(tmp_path / "nao_instalado"))
-        tela.desktop.existe.return_value = False
+        tela.desktop.maximizar_janela.return_value = False
         with pytest.raises(SystemException, match=r"Executável do Fakturama não encontrado: .*\(defina FAKTURAMA_EXE\)"):
             app.abrir()
         popen.assert_not_called()
 
 
-class TestPreencher:
-    def test_clica_ao_lado_do_rotulo_digita_e_confirma_com_tab(self, app, tela, caplog):
-        app._preencher("campo_contato_cep", "14090-260", "CEP")
-        assert tela.mock_calls == _preencher("campo_contato_cep", "14090-260")
+class TestPreencherFormulario:
+    def test_um_clique_por_campo_e_digita_sem_tab(self, app, tela, caplog):
+        app._preencher_formulario([("campo_contato_nome", "Vitória", "Nome"),
+                                   ("campo_contato_cep", "14090-260", "CEP")])
+        assert tela.mock_calls == _preencher(("campo_contato_nome", "Vitória"), ("campo_contato_cep", "14090-260"))
+        assert call.desktop.tecla("tab") not in tela.mock_calls
         assert re.search(r"• CEP\s+← '14090-260'", caplog.text)
+
+    def test_campo_nao_localizado_interrompe_antes_de_digitar_qualquer_coisa(self, app, tela):
+        def ponto_de_clique(chave):
+            if chave == "campo_contato_cep":
+                raise ElementoNaoEncontrado("Imagem 'campo_contato_cep' não encontrada em 15s")
+            return 1, 1
+        tela.desktop.ponto_de_clique.side_effect = ponto_de_clique
+        with pytest.raises(ElementoNaoEncontrado):
+            app._preencher_formulario([("campo_contato_nome", "Vitória", "Nome"),
+                                       ("campo_contato_cep", "14090-260", "CEP")])
+        tela.desktop.clicar.assert_not_called()
+        tela.desktop.digitar.assert_not_called()
 
 
 class TestSalvarEFecharEditor:
@@ -101,9 +146,9 @@ class TestCadastrarContato:
         assert tela.mock_calls == [
             call.desktop.clicar_imagem("btn_novo_contato"),
             call.desktop.localizar("campo_contato_nome"),  # o editor abriu
-            *_preencher("campo_contato_nome", "Vitória"),
-            *_preencher("campo_contato_sobrenome", "Rocha"),
-            *_preencher("campo_contato_cep", "14090-260"),
+            *_preencher(("campo_contato_nome", "Vitória"),
+                        ("campo_contato_sobrenome", "Rocha"),
+                        ("campo_contato_cep", "14090-260")),
             *_salvar_com_print("contato_cadastrado"),
         ]
 
@@ -121,10 +166,10 @@ class TestCadastrarProduto:
         assert tela.mock_calls == [
             call.desktop.clicar_imagem("btn_novo_produto"),
             call.desktop.localizar("campo_produto_numero"),  # o editor abriu
-            *_preencher("campo_produto_numero", "1"),
-            *_preencher("campo_produto_nome", "Sauce Labs Backpack"),
-            *_preencher("campo_produto_descricao", mochila.descricao),
-            *_preencher("campo_produto_preco", "29,99"),
+            *_preencher(("campo_produto_numero", "1"),
+                        ("campo_produto_nome", "Sauce Labs Backpack"),
+                        ("campo_produto_descricao", mochila.descricao),
+                        ("campo_produto_preco", "29,99")),
             *_salvar_com_print("produto_1_cadastrado"),
         ]
         assert mochila.preco == "29.99"  # o dado original (o mesmo do CSV) não é alterado
@@ -162,5 +207,5 @@ def test_cada_imagem_usada_no_cadastro_tem_recorte_mapeado_em_settings(app, tela
     app.cadastrar_produto(produtos[0])
     app.evidenciar_lista("contatos")
     app.evidenciar_lista("produtos")
-    usadas = {c.args[0] for c in tela.desktop.mock_calls if c[0] in ("existe", "localizar", "clicar_imagem")}
+    usadas = {c.args[0] for c in tela.desktop.mock_calls if c[0] in ("existe", "localizar", "clicar_imagem", "ponto_de_clique")}
     assert usadas == set(settings.IMAGENS)

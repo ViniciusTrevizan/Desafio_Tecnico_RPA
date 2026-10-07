@@ -10,8 +10,9 @@ import argparse
 import sys
 
 from config import settings
+from src.core.ambiente import validar_ambiente
 from src.core.contexto import Contexto
-from src.core.excecoes import BusinessException
+from src.core.excecoes import BusinessException, SystemException
 from src.core.logger import banner, configurar_logs, get_logger
 from src.core.relatorio import gerar_relatorio
 
@@ -34,6 +35,12 @@ def main() -> int:
 
     banner(log, f"RPA iniciado — execução {ctx.run_id}")
     log.info(f"Etapa: {args.etapa} | Resultados: {ctx.pasta}")
+
+    try:  # antes de tudo: não adianta coletar na web se o desktop não vai conseguir cadastrar
+        validar_ambiente(precisa_desktop=args.etapa != "producer")
+    except SystemException as erro:
+        log.error(f"Ambiente inválido: {erro}")
+        return 1
 
     try:
         if args.etapa in ("todas", "producer"):

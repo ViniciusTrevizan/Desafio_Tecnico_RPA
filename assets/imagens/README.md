@@ -17,8 +17,9 @@ Capture-os **na mesma resolução/tema** em que o robô vai rodar
 | campo_contato_cep.png           | Rótulo "CEP" no editor de contato                       |
 | campo_produto_numero.png        | Rótulo "Número do item" no editor de produto            |
 | campo_produto_nome.png          | Rótulo "Nome" no editor de produto                      |
-| campo_produto_descricao.png     | Rótulo "Descrição" no editor de produto                 |
+| campo_produto_descricao.png     | Rótulo "Descrição" + canto da caixa multilinha (o título de seção "Description" no topo do editor tem o mesmo texto) |
 | campo_produto_preco.png         | Rótulo "Preço" no editor de produto                     |
 
-Recorte **apenas o rótulo** dos campos: o robô clica `OFFSET_CAMPO_X` pixels
-à direita dele para cair dentro da caixa de texto. Ajuste esse valor se necessário.
+Recorte **apenas o rótulo** dos campos: para imagens `campo_*` o robô clica
+`OFFSET_CAMPO_X` pixels à direita da **borda direita** do rótulo (não no rótulo)
+para cair dentro da caixa de texto. Ajuste esse valor se necessário.

@@ -3,6 +3,7 @@
 PDF §4.5: localizar os campos por reconhecimento de imagem e navegar entre eles com
 atalhos de teclado.
 """
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call
 
@@ -97,6 +98,11 @@ class TestCapturarTela:
 
 
 class TestLocalizar:
+    def test_localizar_caixa_devolve_posicao_e_tamanho_em_coordenadas_da_tela(
+            self, pyautogui_falso, imagem_referencia, tela, relogio):
+        pyautogui_falso.locate.return_value = (100, 200, 40, 20)
+        assert desktop.localizar_caixa("btn_novo_produto") == (100 - 1920, 200, 40, 20)
+
     def test_reconhece_a_imagem_e_devolve_o_centro_em_coordenadas_da_tela(
             self, pyautogui_falso, imagem_referencia, tela, relogio):
         pyautogui_falso.locate.return_value = (100, 200, 40, 20)  # left, top, largura, altura
@@ -151,22 +157,41 @@ class TestExiste:
 
 class TestClicarImagem:
     @pytest.fixture(autouse=True)
-    def localizar(self, monkeypatch):
-        monkeypatch.setattr(desktop, "localizar", MagicMock(return_value=(300, 400)))
+    def localizar_caixa(self, monkeypatch):
+        # left, top, largura, altura → centro em (300, 400), borda direita em x=320
+        monkeypatch.setattr(desktop, "localizar_caixa", MagicMock(return_value=(280, 390, 40, 20)))
 
     def test_clica_no_centro_da_imagem(self, pyautogui_falso):
         desktop.clicar_imagem("btn_novo_contato")
         pyautogui_falso.click.assert_called_once_with(300, 400)
         pyautogui_falso.doubleClick.assert_not_called()
 
-    def test_desloca_o_clique_para_o_campo_ao_lado_do_rotulo(self, pyautogui_falso):
-        desktop.clicar_imagem("campo_contato_nome", offset_x=150, offset_y=-5)
+    def test_desloca_o_clique_manualmente(self, pyautogui_falso):
+        desktop.clicar_imagem("btn_novo_contato", offset_x=150, offset_y=-5)
         pyautogui_falso.click.assert_called_once_with(450, 395)
+
+    def test_campo_clica_a_direita_do_rotulo_e_nao_nele(self, pyautogui_falso, monkeypatch):
+        monkeypatch.setattr(settings, "OFFSET_CAMPO_X", 40)
+        desktop.clicar_imagem("campo_contato_nome")
+        pyautogui_falso.click.assert_called_once_with(320 + 40, 400)
 
     def test_clique_duplo(self, pyautogui_falso):
         desktop.clicar_imagem("nav_produtos", duplo=True)
         pyautogui_falso.doubleClick.assert_called_once_with(300, 400)
         pyautogui_falso.click.assert_not_called()
+
+    def test_ponto_de_clique_de_campo_e_a_caixa_ao_lado_do_rotulo(self, pyautogui_falso, monkeypatch):
+        monkeypatch.setattr(settings, "OFFSET_CAMPO_X", 40)
+        assert desktop.ponto_de_clique("campo_produto_nome") == (320 + 40, 400)
+        assert desktop.ponto_de_clique("btn_novo_produto") == (300, 400)
+        pyautogui_falso.click.assert_not_called()  # só calcula, não clica
+
+
+class TestClicar:
+    def test_um_unico_clique_na_posicao(self, pyautogui_falso):
+        desktop.clicar(360, 400)
+        pyautogui_falso.click.assert_called_once_with(360, 400)
+        pyautogui_falso.doubleClick.assert_not_called()
 
 
 class TestDigitar:
@@ -203,3 +228,37 @@ class TestTecla:
     def test_pressiona_n_vezes(self, pyautogui_falso):
         desktop.tecla("esc", 2)
         pyautogui_falso.press.assert_called_once_with("esc", presses=2)
+
+
+class TestMaximizarJanela:
+    @pytest.mark.parametrize("sistema, funcao", [("Linux", "_maximizar_x11"), ("Windows", "_maximizar_windows")])
+    def test_usa_o_mecanismo_do_sistema_e_espera_a_animacao(self, monkeypatch, relogio, sistema, funcao):
+        monkeypatch.setattr(desktop.ambiente, "SISTEMA", sistema)
+        maximizar = MagicMock(return_value=True)
+        monkeypatch.setattr(desktop, funcao, maximizar)
+        assert desktop.maximizar_janela("Fakturama") is True
+        maximizar.assert_called_once_with("Fakturama")
+        assert relogio.esperas == [settings.ESPERA_APOS_MAXIMIZAR]
+
+    def test_janela_fechada_devolve_falso_sem_esperar(self, monkeypatch, relogio):
+        monkeypatch.setattr(desktop.ambiente, "SISTEMA", "Linux")
+        monkeypatch.setattr(desktop, "_maximizar_x11", MagicMock(return_value=False))
+        assert desktop.maximizar_janela("Fakturama") is False
+        assert relogio.esperas == []
+
+    def test_windows_restaura_minimizada_maximiza_e_ativa(self, monkeypatch):
+        janela = MagicMock(title="Fakturama - C:\\Fakturama", isMinimized=True)
+        outra = MagicMock(title="Ajuda do Fakturama")  # título contém, mas não começa com "Fakturama"
+        pygetwindow = SimpleNamespace(getWindowsWithTitle=lambda nome: [outra, janela],
+                                      PyGetWindowException=Exception)
+        monkeypatch.setitem(sys.modules, "pygetwindow", pygetwindow)
+        assert desktop._maximizar_windows("Fakturama") is True
+        janela.restore.assert_called_once_with()
+        janela.maximize.assert_called_once_with()
+        janela.activate.assert_called_once_with()
+        outra.maximize.assert_not_called()
+
+    def test_windows_sem_janela_devolve_falso(self, monkeypatch):
+        pygetwindow = SimpleNamespace(getWindowsWithTitle=lambda nome: [], PyGetWindowException=Exception)
+        monkeypatch.setitem(sys.modules, "pygetwindow", pygetwindow)
+        assert desktop._maximizar_windows("Fakturama") is False

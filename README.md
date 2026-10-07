@@ -76,8 +76,13 @@ playwright install chromium
 sudo apt install python3-tk python3-dev xclip   # dependências do pyautogui/pyperclip no Linux
 ```
 
-* Fakturama: instale em <https://www.fakturama.info> e aponte `FAKTURAMA_EXE` para o executável.
-* A sessão gráfica precisa ser **X11** (no login, escolha "Ubuntu on Xorg"). No Wayland o pyautogui não funciona.
+* Fakturama: instale em <https://www.fakturama.info>.
+  * **Windows:** aponte `FAKTURAMA_EXE` para o executável.
+  * **Linux:** o robô localiza sozinho (nesta ordem): `FAKTURAMA_EXE`, `Fakturama` no PATH,
+    `/usr/share/fakturama2` (pacote .deb), `/opt/Fakturama2` e os atalhos `*fakturama*.desktop`.
+* Ao iniciar, o robô valida o ambiente (`src/core/ambiente.py`). No Linux, a etapa desktop exige sessão
+  **X11** (no login, escolha a sessão "... on Xorg", ex.: "Ubuntu on Xorg" / "Zorin Desktop on Xorg"): no Wayland o pyautogui não funciona e a execução é abortada
+  antes de começar.
 * Capture as imagens de referência conforme [assets/imagens/README.md](assets/imagens/README.md).
 
 ## Execução

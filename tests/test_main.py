@@ -16,10 +16,18 @@ import main
 from config import settings
 from src.consumer import consumer
 from src.core.evidencias import Evidencias
-from src.core.excecoes import BusinessException
+from src.core.excecoes import BusinessException, SystemException
 from src.models.entidades import Comprador, Produto
 from src.producer import producer
 from src.utils.csv_handler import ler_csv
+
+
+@pytest.fixture(autouse=True)
+def ambiente_valido(monkeypatch):
+    """A máquina que roda os testes pode não ter sessão gráfica X11: a validação é simulada."""
+    validar = MagicMock(name="validar_ambiente")
+    monkeypatch.setattr(main, "validar_ambiente", validar)
+    return validar
 
 
 def _rodar(monkeypatch, *argumentos):
@@ -58,6 +66,19 @@ class TestMain:
         monkeypatch.setattr(main, "configurar_logs", etapas.configurar_logs)
         monkeypatch.setattr(main, "gerar_relatorio", etapas.gerar_relatorio)
         return etapas
+
+    @pytest.mark.parametrize("etapa, precisa_desktop", [("todas", True), ("consumer", True), ("producer", False)])
+    def test_valida_o_ambiente_antes_de_tudo(self, monkeypatch, etapas, ambiente_valido, pasta_resultados,
+                                             etapa, precisa_desktop):
+        _rodar(monkeypatch, "--etapa", etapa)
+        ambiente_valido.assert_called_once_with(precisa_desktop=precisa_desktop)
+
+    def test_ambiente_invalido_aborta_sem_rodar_nenhuma_etapa(self, monkeypatch, etapas, ambiente_valido, caplog):
+        ambiente_valido.side_effect = SystemException("Sessão gráfica Wayland detectada")
+        assert _rodar(monkeypatch) == 1
+        etapas.executar_producer.assert_not_called()
+        etapas.executar_consumer.assert_not_called()
+        assert "Ambiente inválido: Sessão gráfica Wayland detectada" in caplog.text
 
     def test_execucao_completa_roda_producer_consumer_e_conferencia(self, monkeypatch, etapas, pasta_resultados):
         assert _rodar(monkeypatch, "--run-id", "exec") == 0
