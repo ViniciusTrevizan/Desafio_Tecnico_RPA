@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+resultados/*
+!resultados/.gitkeep
+.pytest_cache/
+.coverage
+htmlcov/

@@ -1,0 +1,10 @@
+# Automação web
+playwright>=1.47
+
+# Automação desktop (reconhecimento de imagem + teclado/mouse)
+pyautogui>=0.9.54
+python-xlib>=0.33        # backend X11 do pyautogui no Linux
+opencv-python>=4.10      # habilita confidence= no reconhecimento de imagem
+pyperclip>=1.9           # digitação via área de transferência (acentos)
+mss>=9.0                 # prints de tela rápidos e multi-monitor
+Pillow>=10.0
